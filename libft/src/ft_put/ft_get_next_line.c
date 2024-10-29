@@ -5,107 +5,116 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: dalebran <dalebran@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2023/10/27 08:59:12 by dalebran          #+#    #+#             */
-/*   Updated: 2024/10/26 23:05:40 by dalebran         ###   ########.fr       */
+/*   Created: 2024/10/17 00:38:34 by gbruscan          #+#    #+#             */
+/*   Updated: 2024/10/29 05:34:42 by dalebran         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "libft.h"
 
 #ifndef BUFFER_SIZE
-# define BUFFER_SIZE 42
+# define BUFFER_SIZE 1
 #endif
 
 #ifndef MAX_FD
 # define MAX_FD 1024
 #endif
 
-char	*read_and_concat(int fd, char *remainder, int *eof)
+static size_t	len_char(const char *str, char c)
 {
-	char	*buffer;
-	int		bytes_read;
-	char	*tmp;
+	size_t	i;
 
-	buffer = (char *)malloc((BUFFER_SIZE + 1) * sizeof(char));
-	if (!buffer)
-		return (NULL);
-	bytes_read = read(fd, buffer, BUFFER_SIZE);
-	if (bytes_read < 0)
-	{
-		free(buffer);
-		free(remainder);
-		return (NULL);
-	}
-	if (bytes_read == 0)
-	{
-		*eof = 1;
-		free(buffer);
-		return (remainder);
-	}
-	buffer[bytes_read] = '\0';
-	tmp = ft_strjoin(remainder, buffer);
-	free(remainder);
-	free(buffer);
-	return (tmp);
+	i = 0;
+	while (str && str[i] && str[i] != c)
+		i++;
+	return (i);
 }
 
-char	*extract_line(char **remainder)
+static char	*ft_strjoin_line(char *line, char *buffer)
 {
-	char	*newline_pos;
-	char	*line;
+	char	*join;
+	int		i;
+	int		j;
 
-	newline_pos = ft_strchr(*remainder, '\n');
-	if (newline_pos)
+	i = 0;
+	j = 0;
+	join = (char *)malloc(len_char(line, '\0') + len_char(buffer, '\n') + 2);
+	if (!join)
+		return (NULL);
+	while (line && line[j])
+		join[i++] = line[j++];
+	j = 0;
+	while (buffer && buffer[j] && buffer[j] != '\n')
+		join[i++] = buffer[j++];
+	join[i] = '\n';
+	if (buffer[j] == '\n')
+		i++;
+	join[i] = '\0';
+	if (line)
+		free(line);
+	return (join);
+}
+
+static void	set_buf(char *buffer)
+{
+	int	i;
+	int	j;
+
+	i = 0;
+	j = 0;
+	while (buffer[i] && buffer[i] != '\n')
+		i++;
+	if (buffer[i] == '\n')
+		i++;
+	while (buffer[i + j])
 	{
-		line = ft_substr(*remainder, 0, newline_pos - *remainder + 1);
-		ft_memmove(*remainder, newline_pos + 1, ft_strlen(newline_pos + 1) + 1);
+		buffer[j] = buffer[i + j];
+		j++;
 	}
-	else
+	buffer[j] = '\0';
+}
+
+static char	*read_file(int fd, char *buffer)
+{
+	char	*line;
+	ssize_t	bytes_read;
+
+	bytes_read = 1;
+	line = NULL;
+	if (buffer && buffer[0])
 	{
-		line = ft_strdup(*remainder);
-		free(*remainder);
-		*remainder = NULL;
+		line = ft_strjoin_line(line, buffer);
+		if (len_char(buffer, '\n') != len_char(buffer, '\0'))
+			return (line);
+	}
+	while (bytes_read > 0)
+	{
+		bytes_read = read(fd, buffer, BUFFER_SIZE);
+		if (bytes_read == -1)
+			return (NULL);
+		buffer[bytes_read] = '\0';
+		line = ft_strjoin_line(line, buffer);
+		if (len_char(buffer, '\n') != len_char(buffer, '\0'))
+			break ;
 	}
 	return (line);
 }
 
-char	*get_line_from_remainder(char **remainder, int fd)
-{
-	char	*newline_pos;
-	int		eof;
-
-	newline_pos = ft_strchr(*remainder, '\n');
-	eof = 0;
-	while (!newline_pos && !eof)
-	{
-		*remainder = read_and_concat(fd, *remainder, &eof);
-		if (!*remainder)
-			return (NULL);
-		newline_pos = ft_strchr(*remainder, '\n');
-	}
-	if (!newline_pos && !**remainder)
-	{
-		free(*remainder);
-		*remainder = NULL;
-		return (NULL);
-	}
-	return (extract_line(remainder));
-}
-
 char	*ft_get_next_line(int fd)
 {
-	static char	*remainder[MAX_FD];
+	static char	buffer[1024][BUFFER_SIZE + 1];
+	char		*line;
 
-	if (BUFFER_SIZE <= 0 || fd < 0)
+	if (fd < 0 || BUFFER_SIZE <= 0)
+		return (NULL);
+	line = read_file(fd, buffer[fd]);
+	if (line == NULL)
+		return (NULL);
+	if (line[0] == '\0')
 	{
-		if (remainder[fd])
-		{
-			free(remainder[fd]);
-			remainder[fd] = NULL;
-		}
+		free(line);
 		return (NULL);
 	}
-	if (!remainder[fd])
-		remainder[fd] = ft_strdup("");
-	return (get_line_from_remainder(&remainder[fd], fd));
+	set_buf(buffer[fd]);
+	return (line);
 }
